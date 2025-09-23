@@ -22,29 +22,7 @@ add_action('rest_api_init', function () {
     ]);
 });
 
-/**
- * Permission callback
- *
- * NOTE: This is a simple default that requires the user to be authenticated.
- * Replace or extend this function to validate application passwords / API keys / token as required.
- */
-function smdp_check_application_password_auth(WP_REST_Request $request) {
-    // 1) Allow authenticated users
-    if (is_user_logged_in() && current_user_can('read')) {
-        return true;
-    }
 
-    // 2) Optionally allow an API key via query param or header (example)
-    //    Store a key in WP option 'smdp_api_key' (not created by this plugin).
-    $provided = $request->get_param('smdp_api_key') ?: $request->get_header('x-smdp-api-key');
-    $expected = get_option('smdp_api_key', false);
-    if ($expected && $provided && hash_equals($expected, $provided)) {
-        return true;
-    }
-
-    // By default deny. Replace with proper application password validation if you use WP Application Passwords.
-    return new WP_Error('rest_forbidden', 'You are not authorized to access this endpoint', ['status' => 403]);
-}
 
 /**
  * Cache version handling
@@ -181,7 +159,7 @@ function smdp_get_product_tiered_pricing(int $product_id): array {
  *
  * $mode: 'slug_only' | 'compact' | 'full'
  */
-function smdp_format_product_data($product, string $mode = 'full') {
+function smdp_format_product_data_new($product, string $mode = 'full') {
     if (!$product) return null;
 
     $product_id = (int) $product->get_id();
@@ -344,7 +322,7 @@ function smdp_products_endpoint_callback(WP_REST_Request $request) {
 
     // If mode is slug_only or compact, we can avoid heavy product object creation for large sets.
     $products = [];
-    $all_category_paths = null; // will be loaded on-demand by smdp_format_product_data()
+    $all_category_paths = null; // will be loaded on-demand by smdp_format_product_data_new()
 
     foreach ($product_ids as $pid) {
         $pid = (int) $pid;
@@ -352,7 +330,7 @@ function smdp_products_endpoint_callback(WP_REST_Request $request) {
         $product = wc_get_product($pid);
         if (!$product) continue; // skip deleted/invalid
 
-        $products[] = smdp_format_product_data($product, $mode);
+        $products[] = smdp_format_product_data_new($product, $mode);
     }
 
     wp_reset_postdata();

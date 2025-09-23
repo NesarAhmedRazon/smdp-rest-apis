@@ -17,6 +17,30 @@ function smdp_check_application_password_auth()
   return is_user_logged_in();
 }
 
+// /**
+//  * Permission callback
+//  *
+//  * NOTE: This is a simple default that requires the user to be authenticated.
+//  * Replace or extend this function to validate application passwords / API keys / token as required.
+//  */
+// function smdp_check_application_password_auth(WP_REST_Request $request) {
+//     // 1) Allow authenticated users
+//     if (is_user_logged_in() && current_user_can('read')) {
+//         return true;
+//     }
+
+//     // 2) Optionally allow an API key via query param or header (example)
+//     //    Store a key in WP option 'smdp_api_key' (not created by this plugin).
+//     $provided = $request->get_param('smdp_api_key') ?: $request->get_header('x-smdp-api-key');
+//     $expected = get_option('smdp_api_key', false);
+//     if ($expected && $provided && hash_equals($expected, $provided)) {
+//         return true;
+//     }
+
+//     // By default deny. Replace with proper application password validation if you use WP Application Passwords.
+//     return new WP_Error('rest_forbidden', 'You are not authorized to access this endpoint', ['status' => 403]);
+// }
+
 // Validate WooCommerce REST API credentials
 function smdp_validate_wc_api_auth()
 {
