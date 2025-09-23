@@ -8,7 +8,7 @@ add_action('rest_api_init', function () {
     register_rest_route('smdp/v1', '/categories', [
         'methods'             => 'GET',
         'callback'            => 'smdp_get_categories_with_auth',
-        'permission_callback' => '__return_true', // Public endpoint (adjust if needed)
+        'permission_callback' => 'smdp_check_application_password_auth',
     ]);
 });
 
