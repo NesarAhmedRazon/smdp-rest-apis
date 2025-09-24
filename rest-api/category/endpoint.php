@@ -44,6 +44,7 @@ function smdp_format_category_data($term, $mode = 'compact') {
             'title'  => $term->name,
             'slug'  => $relative_slug,
             'count' => (int) $term->count,
+            'parent' => $term->parent,
         ];
     }
 
@@ -125,9 +126,11 @@ function smdp_get_categories_with_auth(WP_REST_Request $request) {
     }
 
     return rest_ensure_response([
-        'categories' => $categories,
+        'type'        => 'category',
         'total'      => $total,
+        'total_pages' => (int) ceil($total / $per_page),
         'per_page'   => $per_page,
-        'page'       => $page,
+        'current_page' => $page,
+        'data'       => $categories,
     ]);
 }

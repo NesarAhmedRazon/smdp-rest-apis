@@ -235,10 +235,13 @@ function smdp_format_product_data_new($product, string $mode = 'full') {
 
     $full = array_merge($base, [
         'sku' => $product->get_sku(),
+        'lcsc' => $product->get_attribute('pa_easyeda-id'),
+        'brand' => $product->get_attribute('pa_brand'),
         'price' => (float) $product->get_price(),
         'regular_price' => (float) $product->get_regular_price(),
         'sale_price' => (float) $product->get_sale_price(),
         'stock_quantity' => (int) $product->get_stock_quantity(),
+        'unit_of_measure'  => get_post_meta(get_the_ID(), 'woodmart_price_unit_of_measure', true),
         'stock_status' => $product->get_stock_status() === 'instock',
         'featured' => (bool) $product->get_featured(),
         'rating_count' => (int) $product->get_rating_count(),
@@ -265,6 +268,10 @@ function smdp_products_endpoint_callback(WP_REST_Request $request) {
     $page = max(1, intval($request->get_param('page') ?? 1));
     $mode = in_array($request->get_param('mode'), ['slug_only', 'compact', 'full'], true) ? $request->get_param('mode') : 'full';
     $include = $request->get_param('include');
+    $category = $request->get_param('category');
+    if (is_string($category) && strpos($category, ',') !== false) {
+        $category = array_map('trim', explode(',', $category));
+    }
 
     // Normalize include param (accept comma-separated string or array)
     if (is_string($include) && strpos($include, ',') !== false) {
@@ -273,27 +280,35 @@ function smdp_products_endpoint_callback(WP_REST_Request $request) {
 
     // Build cache key with current cache version (so bumping version invalidates all)
     $cache_version = smdp_get_cache_version();
-    $include_key = is_array($include) ? md5(json_encode(array_values($include))) : (string) $include;
-    $cache_key = "smdp_products_v{$cache_version}_mode_{$mode}_p{$page}_pp{$per_page}_inc_{$include_key}";
+    $include_key = is_array($include) ? md5(json_encode(array_values($include))) : (string)$include;
+    $category_key = is_array($category) ? md5(json_encode(array_values($category))) : (string)$category;
+    $cache_key = "smdp_products_v{$cache_version}_mode_{$mode}_p{$page}_pp{$per_page}_cat_{$category_key}";
 
-    // Try transient cache
     $cached = get_transient($cache_key);
-    if ($cached !== false) {
-        return rest_ensure_response($cached);
-    }
+    if($include == 'no-cache') $cached = false; // bypass cache if requested
+    if ($cached !== false) return rest_ensure_response($cached);
 
     // Build query args
-    $args = [
+   $args = [
         'post_type' => 'product',
         'post_status' => 'publish',
         'posts_per_page' => $per_page,
         'paged' => $page,
-        'no_found_rows' => false, // we need found_posts for pagination
-        'fields' => 'ids', // initially fetch only IDs to reduce WP_Query overhead
+        'no_found_rows' => false,
+        'fields' => 'ids',
     ];
+    if (!empty($category)) {
+        $args['tax_query'] = [
+            [
+                'taxonomy' => 'product_cat',
+                'field' => is_numeric(is_array($category) ? $category[0] : $category) ? 'id' : 'slug',
+                'terms' => is_array($category) ? $category : [$category],
+            ],
+        ];
+    }
 
     // if include provided, enforce IDs
-    if (!empty($include)) {
+    if (!empty($include) && !($include === 'no-cache')) {
         $args['post__in'] = is_array($include) ? array_map('intval', $include) : [intval($include)];
         $args['posts_per_page'] = -1;
         $args['paged'] = 1;
@@ -308,12 +323,14 @@ function smdp_products_endpoint_callback(WP_REST_Request $request) {
     // If there are no products, respond fast
     if (empty($product_ids)) {
         $response = [
-            'products' => [],
+            'type' => 'product',
             'total' => (int) $query->found_posts,
             'total_pages' => (int) $query->max_num_pages,
+            'current_page' => $page,
             'per_page' => $per_page,
-            'page' => $page,
+            'data' => $products,
         ];
+        
         // Cache short (avoid repeated DB calls for empty results)
         set_transient($cache_key, $response, MINUTE_IN_SECONDS * 2);
         wp_reset_postdata();
@@ -336,11 +353,13 @@ function smdp_products_endpoint_callback(WP_REST_Request $request) {
     wp_reset_postdata();
 
     $response = [
-        'products' => $products,
+        'type' => 'product',
         'total' => (int) $query->found_posts,
         'total_pages' => (int) $query->max_num_pages,
+        'current_page' => $page,
         'per_page' => $per_page,
-        'page' => $page,
+        'data' => $products,
+
     ];
 
     // Cache result: longer for stable data, shorter for volatile stores.
